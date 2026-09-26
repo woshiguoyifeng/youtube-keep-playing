@@ -1,41 +1,51 @@
-# Youtube NonStop
-![YouTube NonStop Logo](https://github.com/lawfx/YoutubeNonStop/blob/master/images/yns128.png)
+# YouTube Keep Playing
 
-Autoclicker for Youtube's latest "feature" - Video paused. Continue watching?
+Kiss the *"Video paused. Continue watching?"* prompt goodbye.
 
-Available for:
+A maintained revival of [lawfx/YoutubeNonStop](https://github.com/lawfx/YoutubeNonStop)
+(MIT), which has not accepted fixes for a long time while YouTube keeps changing
+how the confirm dialog is triggered. This fork keeps the original core logic and
+adds a resilience layer so playback survives the failure modes reported against
+the upstream extension:
 
-[Chrome](https://chrome.google.com/webstore/detail/youtube-nonstop/nlkaejimjacpillmajjnopmpbkbnocid) <a href="https://chrome.google.com/webstore/detail/youtube-nonstop/nlkaejimjacpillmajjnopmpbkbnocid">
-<img src="https://github.com/lawfx/YoutubeNonStop/blob/master/images/chrome_logo.png" width="25" height="25" /></a>
+| Failure mode (upstream issues) | What this fork does |
+|---|---|
+| Background tab stops working ([#72](https://github.com/lawfx/YoutubeNonStop/issues/72)) | MutationObserver on `ytd-popup-container` + 3s timer scan: any confirm dialog that appears while you're idle is dismissed even when the popup event never fires |
+| Autoplay stalls with no dialog ([#70](https://github.com/lawfx/YoutubeNonStop/issues/70)) | Same scan layer catches dialogs the event path misses |
+| Content warning interstitials ([#67](https://github.com/lawfx/YoutubeNonStop/issues/67)) | Auto-confirms the "I understand and wish to proceed" button |
+| Complete boot failure if YouTube renames an app element | Boot is hardened: a missing `ytd-app` no longer prevents the scan/advisory layers from starting; the video element is claimed at boot, not only on mutation |
 
-[Firefox](https://addons.mozilla.org/en-US/firefox/addon/youtube-nonstop/) <a href="https://addons.mozilla.org/en-US/firefox/addon/youtube-nonstop/">
-<img src="https://github.com/lawfx/YoutubeNonStop/blob/master/images/firefox_logo.png" width="25" height="25" /></a> (see below)
+Also works on [music.youtube.com](https://music.youtube.com) (YT Music), where
+upstream had stopped working ([#66](https://github.com/lawfx/YoutubeNonStop/issues/66)).
 
-[Edge](https://microsoftedge.microsoft.com/addons/detail/youtube-nonstop/lgakodbaikpcnfpmanpenlgaghdaifbm) <a href="https://microsoftedge.microsoft.com/addons/detail/youtube-nonstop/lgakodbaikpcnfpmanpenlgaghdaifbm">
-<img src="https://github.com/lawfx/YoutubeNonStop/blob/master/images/edge_logo.png" width="25" height="25" /></a>
+## Install
 
-For Opera install this extension first https://addons.opera.com/en/extensions/details/install-chrome-extensions/ and then install YouTube NonStop from the Chrome store.
+**Firefox** — [Firefox Add-ons listing](https://addons.mozilla.org/) (search
+"YouTube Keep Playing") or load the signed `.zip` via `about:debugging`.
 
----
+**Chrome / Edge** — load this folder unpacked via `chrome://extensions`
+(Developer mode → Load unpacked).
 
-In your Firefox, media keys may be disabled. To enable the functionality:
-1. Navigate to about:config from your address bar
-2. If there is a warning message just confirm that you understand the risks
-3. Search for media.hardwaremediakeys.enabled and set to TRUE
-3. Search for dom.media.mediasession.enabled and set to TRUE
-4. Restart your browser
+## Manual install (temporary, any browser)
 
----
+1. Download this repo as a ZIP.
+2. Firefox: `about:debugging` → *This Firefox* → *Load Temporary Add-on…* → pick `manifest.json`.
+3. The icon shows ▶; click it to confirm the extension is active.
 
-If you want to load the extension by yourself in your browser without installing it from store or Google suddenly decides to take action against it, follow the instructions below:
+## How it works
 
-1. Clone or download this repository
-    - If you download it, make sure to extract it first
+Three independent layers, all gated on ~5s of user inactivity (your own pause
+inputs are always honored):
 
-*(from the official [Google instructions](https://developer.chrome.com/extensions/getstarted))*
+1. **Popup event** — YouTube fires `yt-popup-opened` when the confirm dialog
+   opens; we click it away and resume playback.
+2. **DOM scan** — a MutationObserver plus a fallback timer watch the popup
+   container for `yt-confirm-dialog-renderer` elements, covering background
+   tabs and cases where the event never fires.
+3. **Media-key guard** — prevents YouTube from hijacking the media-session
+   pause handler, so your media keys still pause playback for real.
 
-2. Open the Extension Management page by navigating to chrome://extensions
-    - The Extension Management page can also be opened by clicking on the Chrome menu, hovering over **More Tools** then selecting **Extensions**
-3. Enable Developer Mode by clicking the toggle switch next to **Developer mode**
-4. Click the **Load unpacked** button and select the extension directory
-5. Ta-da! The extension has been successfully installed!
+## License
+
+MIT — original work Copyright (c) 2018 Nikos Ioannou; see [LICENSE](LICENSE).
+Modifications Copyright (c) 2026.

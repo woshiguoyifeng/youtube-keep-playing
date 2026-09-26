@@ -1,12 +1,19 @@
-const tag = '[Youtube NonStop]';
+const tag = '[YouTube Keep Playing]';
 const isYoutubeMusic = window.location.hostname === 'music.youtube.com';
 
-const popupEventNodename = isYoutubeMusic ? 'YTMUSIC-YOU-THERE-RENDERER' : 'YT-CONFIRM-DIALOG-RENDERER';
+const confirmNodename = isYoutubeMusic ? 'YTMUSIC-YOU-THERE-RENDERER' : 'YT-CONFIRM-DIALOG-RENDERER';
+// CSS selectors are case-insensitive, so the lowercase form matches both.
+const confirmSelector = confirmNodename.toLowerCase();
 
 const MutationObserver = window.MutationObserver || window.WebKitMutationObserver;
-let appObserver = null;
 const appName = isYoutubeMusic ? 'ytmusic-app' : 'ytd-app';
 const popupContainer = isYoutubeMusic ? 'ytmusic-popup-container' : 'ytd-popup-container';
+
+// Content advisory interstitial ("I understand and wish to proceed") — the
+// user explicitly opened the video, so this is confirmed regardless of idle.
+const advisoryButtonSelector =
+  'ytd-watch-flexy[player-unavailable] button[aria-label="I understand and wish to proceed"]';
+const advisoryIntervalMillis = 2000;
 
 let pauseRequested = false;
 let pauseRequestedTimeout;
@@ -15,6 +22,8 @@ const idleTimeoutMillis = 5000;
 let lastInteractionTime = new Date().getTime();
 
 let videoElement = null;
+let appObserver = null;
+let popupObserverAttached = false;
 
 function log(message) {
   console.log(`${tag}[${getTimestamp()}] ${message}`);
@@ -30,8 +39,7 @@ function asDoubleDigit(value) {
 
 function getTimestamp() {
   let dt = new Date();
-  let time = asDoubleDigit(dt.getHours()) + ':' + asDoubleDigit(dt.getMinutes()) + ':' + asDoubleDigit(dt.getSeconds());
-  return time;
+  return `${asDoubleDigit(dt.getHours())}:${asDoubleDigit(dt.getMinutes())}:${asDoubleDigit(dt.getSeconds())}`;
 }
 
 function isIdle() {
@@ -64,11 +72,9 @@ function listenForMediaKeys() {
 
 function listenForMouse() {
   const eventName = window.PointerEvent ? 'pointer' : 'mouse';
-  debug(`Using ${eventName} events`);
   document.addEventListener(eventName + 'down', (e) => {
     processInteraction(eventName + 'down');
   });
-
   document.addEventListener(eventName + 'up', (e) => {
     processInteraction(eventName + 'up');
   });
@@ -78,7 +84,6 @@ function listenForKeyboard() {
   document.addEventListener('keydown', (e) => {
     processInteraction('keydown');
   });
-
   document.addEventListener('keyup', (e) => {
     processInteraction('keyup');
   });
@@ -93,28 +98,53 @@ function processInteraction(action) {
   lastInteractionTime = new Date().getTime();
 }
 
-function observeApp() {
-  debug(`Observing ${appName}...`);
-  appObserver = new MutationObserver((mutations, observer) => {
-    overrideVideoPause();
-  });
+function dismissConfirmPopup() {
+  debug('[dismiss confirm popup]');
+  const container = document.querySelector(popupContainer);
+  if (container) container.click();
+  pauseVideo();
+  videoElement?.play();
+}
 
-  appObserver.observe(document.querySelector(appName), {
-    childList: true,
-    subtree: true
-  });
+function handlePopupOpened(e) {
+  if (isIdle() && e.detail && e.detail.nodeName === confirmNodename) {
+    dismissConfirmPopup();
+  }
 }
 
 function listenForPopupEvent() {
   debug('Listening for popup event...');
-  document.addEventListener('yt-popup-opened', (e) => {
-    if (isIdle() && e.detail.nodeName === popupEventNodename) {
-      debug('[closing popup]');
-      document.querySelector(popupContainer).click();
-      pauseVideo();
-      videoElement.play();
-    }
-  });
+  document.addEventListener('yt-popup-opened', handlePopupOpened);
+}
+
+// Resilience layer: the popup event does not fire in every scenario
+// (background tabs, throttled timers, autoplay stall dialogs). Watch the
+// popup container directly so any confirm renderer that appears while the
+// user is idle gets dismissed even without the event.
+function scanPopupContainer() {
+  if (!isIdle()) return;
+  const open = document.querySelectorAll(
+    `${popupContainer} ${confirmSelector}, ${confirmSelector}`);
+  if (open.length > 0) {
+    debug(`[scan] found ${open.length} confirm dialog(s) in DOM`);
+    dismissConfirmPopup();
+  }
+}
+
+function observePopupContainer(retry) {
+  const container = document.querySelector(popupContainer);
+  if (!container) {
+    if (retry < 20) setTimeout(() => observePopupContainer(retry + 1), 1500);
+    return;
+  }
+  if (popupObserverAttached) return;
+  popupObserverAttached = true;
+  debug(`Observing ${popupContainer}...`);
+  const observer = new MutationObserver(scanPopupContainer);
+  observer.observe(container, {childList: true, subtree: true});
+  // Timer fallback for when MutationObserver alone is not enough; browsers
+  // throttle timers in background tabs, the observer keeps working.
+  setInterval(scanPopupContainer, 3000);
 }
 
 function overrideVideoPause() {
@@ -137,6 +167,25 @@ function overrideVideoPause() {
   };
 }
 
+function observeApp() {
+  debug(`Observing ${appName}...`);
+  appObserver = new MutationObserver((mutations, observer) => {
+    overrideVideoPause();
+  });
+
+  appObserver.observe(document.querySelector(appName), {
+    childList: true,
+    subtree: true
+  });
+}
+
+function autoConfirmAdvisory() {
+  const button = document.querySelector(advisoryButtonSelector);
+  if (!button) return;
+  debug('[auto-confirm advisory prompt]');
+  button.click();
+}
+
 function setPauseRequestedTimeout(justClear = false) {
   clearTimeout(pauseRequestedTimeout);
   if (justClear) return;
@@ -155,6 +204,15 @@ listenForMouse();
 listenForKeyboard();
 
 listenForPopupEvent();
-observeApp();
+overrideVideoPause();
+try {
+  observeApp();
+} catch (e) {
+  // A redesign could rename the app element; the popup scan and advisory
+  // layers below must still boot.
+  log(`observeApp failed: ${e}`);
+}
+observePopupContainer(0);
+setInterval(autoConfirmAdvisory, advisoryIntervalMillis);
 
 log(`Monitoring YouTube ${isYoutubeMusic ? 'Music ' : ''}for 'Confirm watching?' action...`);

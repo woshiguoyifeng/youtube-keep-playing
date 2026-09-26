@@ -1,8 +1,16 @@
 {
-  "name": "YouTube NonStop",
-  "short_name": "YT NonStop",
-  "version": "0.9.2",
-  "description": "Kiss the annoying \"Video paused. Continue watching?\" confirmation goodbye!",
+  "name": "YouTube Keep Playing",
+  "short_name": "YT Keep Playing",
+  "version": "1.0.0",
+  "description": "Kiss the 'Video paused. Continue watching?' prompt goodbye. Maintained revival — keeps music and long videos playing, in foreground and background tabs.",
+  "author": "woshiguoyifeng",
+  "homepage_url": "https://github.com/woshiguoyifeng/youtube-keep-playing",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "youtube-keep-playing@woshiguoyifeng",
+      "strict_min_version": "115.0"
+    }
+  },
   "web_accessible_resources": [
     {
       "resources": [
@@ -29,17 +37,17 @@
   "action": {
     "default_popup": "popup.html",
     "default_icon": {
-      "16": "images/yns16.png",
-      "32": "images/yns32.png",
-      "48": "images/yns48.png",
-      "128": "images/yns128.png"
+      "16": "images/ykp16.png",
+      "32": "images/ykp32.png",
+      "48": "images/ykp48.png",
+      "128": "images/ykp128.png"
     }
   },
   "icons": {
-    "16": "images/yns16.png",
-    "32": "images/yns32.png",
-    "48": "images/yns48.png",
-    "128": "images/yns128.png"
+    "16": "images/ykp16.png",
+    "32": "images/ykp32.png",
+    "48": "images/ykp48.png",
+    "128": "images/ykp128.png"
   },
   "manifest_version": 3
 }
